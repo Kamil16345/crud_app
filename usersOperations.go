@@ -3,30 +3,65 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"github.com/google/uuid"
+	"io"
 	"os"
 )
 
 type User struct {
-	id    int    `json:"id"`
-	name  string `json:"name"`
-	email string `json:"email"`
-	phone string `json:"phone"`
+	Id    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Phone string `json:"phone"`
+}
+type Users struct {
+	Users []*User `json:"Users"`
 }
 
-func (t *User) Create(data interface{}) error {
-	file, err := os.OpenFile("users.json", os.O_WRONLY|os.O_CREATE, 0644)
+func (t *User) Create(user *User) error {
+	file, err := os.OpenFile("users.json", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		fmt.Println("Error creating file: ", err)
+		fmt.Println("Error opening file: ", err)
 		return err
 	}
+
 	defer file.Close()
-	jsonData, err := json.Marshal(data)
+	byteValue, _ := io.ReadAll(file)
+
+	user.Id = uuid.New().ClockSequence()
+
+	if err != nil {
+		return err
+	}
+
+	err = file.Truncate(0)
+	file.Seek(0, 0)
+
+	if err != nil {
+		fmt.Println("Error during file trunc:", err)
+	}
+	var UsersData Users
+	if len(byteValue) > 0 {
+		err = json.Unmarshal(byteValue, &UsersData)
+		if err != nil {
+			fmt.Println("Error unmarshaling JSON: ", err)
+		}
+	}
+
+	var appUsers []*User
+	for _, value := range UsersData.Users {
+		appUsers = append(appUsers, &User{Id: value.Id, Name: value.Name, Email: value.Email, Phone: value.Phone})
+	}
+	appUsers = append(appUsers, &User{Id: user.Id, Name: user.Name, Email: user.Email, Phone: user.Phone})
+	jsonData, err := json.MarshalIndent(Users{appUsers}, "", "\t")
+
 	if err != nil {
 		fmt.Println("Error serializing object: ", err)
 		return err
 	}
+
 	_, err = file.Write(jsonData)
+
 	if err != nil {
 		fmt.Println("Error writing to file: ", err)
 		return err
@@ -34,73 +69,101 @@ func (t *User) Create(data interface{}) error {
 	return nil
 }
 func (t *User) Read(id int) (interface{}, error) {
-	data, err := ioutil.ReadFile("users.json")
+	file, err := os.OpenFile("users.json", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		fmt.Println("Error reading file: ", err)
+		fmt.Println("Error opening file: ", err)
 		return nil, err
 	}
-	var users []User
-	err = json.Unmarshal(data, &users)
+	defer file.Close()
+	byteValue, _ := io.ReadAll(file)
+	var users Users
+	err = json.Unmarshal(byteValue, &users)
 	if err != nil {
 		fmt.Println("Error unmarshalling JSON data: ", err)
 		return nil, err
 	}
-	user := findUser(users, id)
+	user := findUser(users.Users, id)
 	if user != nil {
-		fmt.Println("User found:")
-		fmt.Println("User ID:", user.id)
-		fmt.Println("User name:", user.name)
-		fmt.Println("User email:", user.email)
-		fmt.Println("User phone:", user.phone)
+		fmt.Println("User found: ")
+		fmt.Println("User ID: ", user.Id)
+		fmt.Println("User name: ", user.Name)
+		fmt.Println("User email: ", user.Email)
+		fmt.Println("User phone: ", user.Phone)
 		return user, nil
 	} else {
 		fmt.Println("User not found")
 		return nil, err
 	}
 }
-func (t *User) ReadAll() (interface{}, error) {
-	filePath := "users.json"
-	fileContent, err := ioutil.ReadFile(filePath)
+func (t *User) ReadAll(display bool) (interface{}, error) {
+	file, err := os.OpenFile("users.json", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		fmt.Println("Error reading file: ", err)
+		fmt.Println("Error opening file: ", err)
+		return nil, err
 	}
-	var users string
-	err = json.Unmarshal(fileContent, &users)
+	defer file.Close()
+	byteValue, _ := io.ReadAll(file)
+	var users Users
+	err = json.Unmarshal(byteValue, &users)
 	if err != nil {
 		fmt.Println("Error during unmarshalling JSON: ", err)
 	}
+	if display {
+		for i := 0; i < len(users.Users); i++ {
+			user := users.Users[i]
+			fmt.Println("--------------------")
+			fmt.Println("User ID: ", user.Id)
+			fmt.Println("User name: ", user.Name)
+			fmt.Println("User email: ", user.Email)
+			fmt.Println("User phone: ", user.Phone)
+		}
+	}
 	return users, err
 }
-func (t *User) Update(id int, data interface{}) error {
-	filePath := "users.json"
-	data, err := ioutil.ReadFile(filePath)
+func (t *User) Update(id int, data *User) error {
+	file, err := os.OpenFile("users.json", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		fmt.Println("Error reading file: ", err)
+		fmt.Println("Error opening file: ", err)
 		return err
 	}
-	var users []User
-	dataBytes := data.([]byte)
-	err = json.Unmarshal(dataBytes, &users)
+	defer file.Close()
+	byteValue, _ := io.ReadAll(file)
+
+	var users Users
+
+	err = json.Unmarshal(byteValue, &users)
 	if err != nil {
 		fmt.Println("Error unmarshalling JSON data: ", err)
 		return err
 	}
-	newUser := data.(*User)
-	user := findUser(users, id)
+
+	user := findUser(users.Users, id)
 	if user == nil {
 		fmt.Println("User not found")
 		return nil
 	}
-	user.name = newUser.name
-	user.email = newUser.email
-	user.phone = newUser.phone
+	if data.Name != "" {
+		user.Name = data.Name
+	}
 
-	jsonData, err := json.Marshal(users)
+	if data.Email != "" {
+		user.Email = data.Email
+	}
+
+	if data.Phone != "" {
+		user.Phone = data.Phone
+	}
+
+	jsonData, err := json.MarshalIndent(Users{users.Users}, "", "\t")
+
 	if err != nil {
-		fmt.Println("Error marshalling JSON data: ", err)
+		fmt.Println("Error serializing object: ", err)
 		return err
 	}
-	err = ioutil.WriteFile("users.json", jsonData, 0644)
+	err = file.Truncate(0)
+	file.Seek(0, 0)
+	_, err = file.Write(jsonData)
+
 	if err != nil {
 		fmt.Println("Error writing to file: ", err)
 		return err
@@ -108,49 +171,77 @@ func (t *User) Update(id int, data interface{}) error {
 	return nil
 }
 func (t *User) Delete(id int) error {
-	data, err := ioutil.ReadFile("users.json")
+	file, err := os.OpenFile("users.json", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		fmt.Println("Error reading file: ", err)
-		return err
 	}
-	var users []User
-	err = json.Unmarshal(data, &users)
+	byteValue, _ := io.ReadAll(file)
+	var users Users
+
+	err = json.Unmarshal(byteValue, &users)
 	if err != nil {
-		fmt.Println("Error in unmarshalling JSON data: ", err)
+		fmt.Println("Error unmarshalling JSON data: ", err)
 		return err
 	}
-	user := findUser(users, id)
+
+	user := findUser(users.Users, id)
 	if user == nil {
 		fmt.Println("User not found")
 		return nil
 	}
-	for i, user := range users {
-		if user.id == id {
-			users = append(users[:i], users[i+1:]...)
-			break
+	var updatedUsers []*User
+	for _, user := range users.Users {
+		if user.Id == id {
+			continue
+		} else {
+			updatedUsers = append(updatedUsers, &User{Id: user.Id, Name: user.Name, Email: user.Email, Phone: user.Phone})
 		}
 	}
-	jsonData, err := json.Marshal(users)
+
+	jsonData, err := json.MarshalIndent(Users{updatedUsers}, "", "\t")
+
 	if err != nil {
-		fmt.Println("Error marshalling JSON data: ", err)
+		fmt.Println("Error serializing object: ", err)
 		return err
 	}
 
-	err = ioutil.WriteFile("users.json", jsonData, 0644)
+	_, err = file.Write(jsonData)
+
 	if err != nil {
 		fmt.Println("Error writing to file: ", err)
 		return err
 	}
-
-	fmt.Println("User deleted successfully")
 	return nil
 }
 
-func findUser(users []User, id int) *User {
+func findUser(users []*User, id int) *User {
 	for _, user := range users {
-		if user.id == id {
-			return &user
+		if user.Id == id {
+			return user
 		}
 	}
 	return nil
+}
+func checkIfUserExists(id int) bool {
+	file, err := os.OpenFile("users.json", os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		fmt.Println("Error opening file: ", err)
+		return false
+	}
+	defer file.Close()
+
+	byteValue, _ := io.ReadAll(file)
+	var users Users
+	if len(byteValue) > 0 {
+		err = json.Unmarshal(byteValue, &users)
+		if err != nil {
+			fmt.Println("Error unmarshaling JSON: ", err)
+		}
+	}
+	for i := 0; i < len(users.Users); i++ {
+		if users.Users[i].Id == id {
+			return true
+		}
+	}
+	return false
 }

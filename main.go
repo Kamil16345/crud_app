@@ -2,22 +2,16 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 )
 
 func main() {
 
-	//p := prompt.New(
-	//	executor,
-	//	func(d prompt.Document) []prompt.Suggest { return []prompt.Suggest{} },
-	//	prompt.OptionPrefix("CRUD-app"),
-	//)
-	//p.Run()
 	executor()
 }
 
-// func executor(s string) {
 func executor() {
 	fmt.Println("Welcome in CRUD application")
 	fmt.Println("---------------------------")
@@ -45,7 +39,7 @@ func executor() {
 			}
 		case 3:
 			fmt.Println("Bye!")
-			break
+			os.Exit(0)
 		}
 	}
 }
